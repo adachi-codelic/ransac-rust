@@ -1,90 +1,53 @@
-use crate::color::Color;
-use crate::point::Point3D;
-use kdtree::KdTree;
+use crate::plane3d::Plane;
+use crate::point3d::Point3D;
+use crate::point_cloud::PointCloud;
+use rand::Rng;
 
-/// Vector3D is a struct that represents a point in 3D space.
-#[derive(Debug, Clone, Copy)]
-struct Vector3D {
-    x: f64,
-    y: f64,
-    z: f64,
-}
-impl Vector3D {
-    fn new(x: f64, y: f64, z: f64) -> Vector3D {
-        Vector3D { x, y, z }
-    }
-    fn normalize(&self) -> Vector3D {
-        let length = (self.x * self.x + self.y * self.y + self.z * self.z).sqrt();
-        if length == 0.0 {
-            Vector3D {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
+pub fn ransac(point_cloud: PointCloud, threshold: f32, iterations: usize) -> (Plane, Vec<Point3D>) {
+    let mut best_plane: Plane = Plane::new_without_color(0.0, 0.0, 0.0, 0.0);
+    let mut point_in_best_plane: Vec<Point3D> = vec![];
+    let mut best_plane_size: usize = 0;
+    let mut progress: usize = 0;
+    for _ in 0..iterations {
+        if iterations >= progress * iterations / 10 {
+            println!("{}% done", progress * 10);
+            progress += 1;
+        }
+        // 平面に属する点を集める
+        let mut point_in_plane: Vec<Point3D> = vec![];
+        let mut plane_size: usize = 0;
+        let mut used_points: Vec<Point3D> = Vec::new();
+        let mut unused_points: Vec<Point3D> = Vec::new();
+        let mut rng = rand::thread_rng();
+        let mut random_points = vec![];
+        // 3点をランダムに選んで平面を作成
+        for _ in 0..3 {
+            let random_point: Point3D =
+                point_cloud.points[rng.gen_range(0..point_cloud.points.len())].clone();
+            random_points.push(random_point.clone());
+            used_points.push(random_point.clone());
+        }
+        let plane: Plane =
+            Plane::gen_plane_from_points(&random_points[0], &random_points[1], &random_points[2]);
+        // 平面に属する点を集める
+        for point in point_cloud.points.iter() {
+            if !used_points.contains(point) {
+                let distance = point.distance_to_plane(&plane);
+                if distance < threshold {
+                    point_in_plane.push(point.clone());
+                    used_points.push(point.clone());
+                    plane_size += 1;
+                } else {
+                    unused_points.push(point.clone());
+                }
             }
-        } else {
-            Vector3D {
-                x: self.x / length,
-                y: self.y / length,
-                z: self.z / length,
-            }
+        }
+        // 平面に属する点が多ければ更新
+        if plane_size > best_plane_size {
+            point_in_best_plane = point_in_plane;
+            best_plane = plane;
+            best_plane_size = plane_size;
         }
     }
-}
-
-/// PointCloud is a struct that represents a collection of points in 3D space.
-#[derive(Debug, Clone)]
-struct PointCloud {
-    points: KdTree<f64, i64, Point3D>,
-}
-impl PointCloud {
-    fn new(points: KdTree<f64, i64, Point3D>) -> PointCloud {
-        PointCloud { points }
-    }
-}
-
-/// Plane is a struct that represents a plane in 3D space.
-/// The plane is represented by the equation ax + by + cz + d = 0.
-#[derive(Debug, Clone, Copy)]
-
-struct Plane {
-    a: f64,
-    b: f64,
-    c: f64,
-    d: f64,
-    color: Color,
-}
-impl Plane {
-    fn new(a: f64, b: f64, c: f64, d: f64, color: Color) -> Plane {
-        Plane {
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-            color: color,
-        }
-    }
-    fn new_without_color(a: f64, b: f64, c: f64, d: f64) -> Plane {
-        Plane {
-            a: a,
-            b: b,
-            c: c,
-            d: d,
-            color: (0, 0, 0),
-        }
-    }
-    fn get_normal_vector(&self) -> Vector3D {
-        Vector3D::new(self.a, self.b, self.c).normalize()
-    }
-}
-struct Project {
-    project_name: String,
-    point_cloud: PointCloud,
-}
-impl Project {
-    fn new(project_name: String, point_cloud: PointCloud) -> Project {
-        Project {
-            project_name,
-            point_cloud,
-        }
-    }
+    (best_plane, point_in_best_plane)
 }

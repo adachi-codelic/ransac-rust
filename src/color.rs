@@ -1,1 +1,1 @@
-pub type Color = (u8, u8, u8);
+pub type Color = [i32; 3];
